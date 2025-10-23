@@ -1,70 +1,74 @@
 import SwiftUI
 
 struct CateringPizzaView: View {
-    @State private var appetite = "Normal Eaters"
-    @State private var size = "Medium (12\")"
-    @State private var thickness = "Classic"
+    @State private var guests: Int = 12
+    @State private var slicesPerPerson: Double = 3
+    @State private var slicesPerPie: Int = 8
 
-    let appetiteOptions = ["Small Eaters", "Normal Eaters", "Big Eaters"]
-    let sizeOptions = ["Small (9\")", "Medium (12\")", "Large (16\")"]
-    let thicknessOptions = ["Thin", "Classic", "Deep"]
+    // link with Making defaults
+    @State private var ballWeightGrams: Double = 260
+    @State private var hydrationPct: Double = 65
+    @State private var saltPct: Double = 2.5
+    @State private var yeastPct: Double = 0.2
 
-    var appetiteSlicesPerPerson: Double {
-        switch appetite {
-        case "Small Eaters": return 1.5
-        case "Big Eaters": return 3.5
-        default: return 2.5
-        }
+    @State private var unit: WeightUnit = .grams
+
+    private var requiredSlices: Int { Int(ceil(Double(guests) * slicesPerPerson)) }
+    private var piesNeeded: Int { Int(ceil(Double(requiredSlices) / Double(slicesPerPie))) }
+    private var doughBalls: Int { piesNeeded }
+
+    private var totalDoughG: Double { Double(doughBalls) * ballWeightGrams }
+    private var flourG: Double {
+        let h = hydrationPct / 100, s = saltPct / 100, y = yeastPct / 100
+        return totalDoughG / (1 + h + s + y)
     }
+    private var waterG: Double { flourG * (hydrationPct / 100) }
+    private var saltG:  Double { flourG * (saltPct / 100) }
+    private var yeastG: Double { flourG * (yeastPct / 100) }
 
-    var estimatedSlicesPerPizza: Int {
-        switch (size, thickness) {
-        case ("Small (9\")", "Thin"): return 6
-        case ("Small (9\")", _): return 5
-        case ("Medium (12\")", "Thin"): return 8
-        case ("Medium (12\")", _): return 7
-        case ("Large (16\")", "Thin"): return 10
-        case ("Large (16\")", _): return 8
-        default: return 8
-        }
-    }
-
-    @State private var people: Double = 10
-    var totalSlices: Double { Double(people) * appetiteSlicesPerPerson }
-    var pizzasNeeded: Int { Int(ceil(totalSlices / Double(estimatedSlicesPerPizza))) }
-    var totalEstimatedCost: Double { Double(pizzasNeeded) * 12.99 }
+    private func fmt(_ g: Double) -> String { unit.format(grams: g) }
+    private var flourCups: String { WeightUnit.flourCups(fromFlourGrams: flourG) }
 
     var body: some View {
-        Form {
-            Section(header: Text("Guests")) {
-                Stepper(value: $people, in: 1...500, step: 1) {
-                    Text("Number of people: \(Int(people))")
+        NavigationStack {
+            Form {
+                Section("Event") {
+                    Stepper("Guests: \(guests)", value: $guests, in: 1...500)
+                    HStack {
+                        Text("Slices per person")
+                        Spacer()
+                        Stepper("", value: $slicesPerPerson, in: 1...6, step: 0.5).labelsHidden()
+                        Text(String(format: "%.1f", slicesPerPerson))
+                            .frame(width: 60, alignment: .trailing)
+                            .monospacedDigit()
+                    }
+                    Stepper("Slices per pie: \(slicesPerPie)", value: $slicesPerPie, in: 4...12)
                 }
 
-                Picker("Appetite", selection: $appetite) {
-                    ForEach(appetiteOptions, id: \.self) { Text($0) }
+                Section("Units") {
+                    Picker("Units", selection: $unit) {
+                        ForEach(WeightUnit.allCases) { u in Text(u.rawValue).tag(u) }
+                    }
+                }
+
+                Section("Results") {
+                    LabeledValue(label: "Required slices", value: "\(requiredSlices)")
+                    LabeledValue(label: "Pizzas needed",   value: "\(piesNeeded)")
+                    LabeledValue(label: "Dough balls",     value: "\(doughBalls)")
+                }
+
+                Section("Dough") {
+                    LabeledValue(label: "Ball weight", value: WeightUnit.grams.format(grams: ballWeightGrams))
+                    LabeledValue(label: "Total dough", value: fmt(totalDoughG))
+                    LabeledValue(label: "Flour",       value: fmt(flourG) + " (\(flourCups))")
+                    LabeledValue(label: "Water",       value: fmt(waterG))
+                    LabeledValue(label: "Salt",        value: fmt(saltG))
+                    LabeledValue(label: "Yeast",       value: fmt(yeastG))
                 }
             }
-
-            Picker("Pizza Size", selection: $size) {
-                ForEach(sizeOptions, id: \.self) { Text($0) }
-            }
-
-            Picker("Crust Thickness", selection: $thickness) {
-                ForEach(thicknessOptions, id: \.self) { Text($0) }
-            }
-
-            Section(header: Text("Summary")) {
-                Text("Each person eats about \(appetiteSlicesPerPerson, specifier: "%.1f") slices")
-                Text("Total slices needed: \(totalSlices, specifier: "%.1f")")
-                Text("Slices per pizza: \(estimatedSlicesPerPizza)")
-            }
-
-            Section(header: Text("Result")) {
-                Text("You need to order \(pizzasNeeded) pizzas")
-                Text("Estimated cost: $\(totalEstimatedCost, specifier: "%.2f")")
-            }
+            .navigationTitle("Catering")
         }
-        .navigationTitle("Catering Calculator")
     }
 }
+
+#Preview { CateringPizzaView() }
