@@ -90,42 +90,31 @@ struct MakingPizzaView: View {
                 VStack(spacing: 20) {
 
                     // Presets & Units
-                    HStack(spacing: 12) {
-                        GroupBox {
-                            VStack(spacing: 4) {
-                                Text("Dough Type")
-                                    .font(.headline)
-                                HStack {
-                                    Spacer()
-                                    Picker("Preset", selection: Binding(
-                                        get: { selectedPreset ?? PRESETS.first! },
-                                        set: { p in
-                                            selectedPreset = p
-                                            hydrationPct = p.hydration
-                                            saltPct = p.salt
-                                            yeastPct = p.yeast
-                                        })) {
-                                        ForEach(PRESETS) { p in Text(p.name).tag(p) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    Spacer()
-                                }
+                    GroupBox("Dough Type") {
+                        HStack {
+                            Picker("Preset", selection: Binding(
+                                get: { selectedPreset ?? PRESETS.first! },
+                                set: { p in
+                                    selectedPreset = p
+                                    hydrationPct = p.hydration
+                                    saltPct = p.salt
+                                    yeastPct = p.yeast
+                                })) {
+                                ForEach(PRESETS) { p in Text(p.name).tag(p) }
                             }
-                        }
-                        
-                        GroupBox {
-                            VStack(spacing: 4) {
-                                Text("Weighing System")
-                                    .font(.headline)
-                                HStack {
-                                    Spacer()
-                                    Picker("Units", selection: $unit) {
-                                        ForEach(WeightUnit.allCases) { u in Text(u.rawValue).tag(u) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    Spacer()
-                                }
-                            }
+                            .pickerStyle(.menu)
+
+                            Spacer()
+
+                            VStack(alignment: .trailing, spacing: 4) {
+    Text("Weighing System")
+        .font(.caption)
+        .foregroundColor(.primary)
+    Picker("Units", selection: $unit) {
+        ForEach(WeightUnit.allCases) { u in Text(u.rawValue).tag(u) }
+    }
+}
+.pickerStyle(.menu)
                         }
                     }
 

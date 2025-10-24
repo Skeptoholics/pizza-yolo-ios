@@ -1,67 +1,94 @@
 import SwiftUI
+import UIKit
 
-struct ShoppingListView: View {
-    let title: String
-    let flour: String
-    let water: String
-    let salt: String
-    let yeast: String
-    let doughBalls: Int
-    let ballWeight: String
-    let flourCups: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.title).bold()
-            Divider()
-            Text("Dough balls: \(doughBalls)")
-            Text("Ball weight: \(ballWeight)")
-            Divider()
-            Text("Flour: \(flour)  (\(flourCups))")
-            Text("Water: \(water)")
-            Text("Salt: \(salt)")
-            Text("Yeast: \(yeast)")
-        }
-        .padding(24)
-        .frame(maxWidth: 500, alignment: .leading)
-    }
-}
-
+// MARK: - Export Function
 @MainActor
-func exportShoppingListPDF(view: ShoppingListView, suggestedName: String) async throws -> URL {
+func exportViewAsPDF<V: View>(view: V, suggestedName: String) async throws -> URL {
+    // Create renderer for any SwiftUI view
     let renderer = ImageRenderer(content: view)
-    #if os(macOS)
-    renderer.isOpaque = false
-    #endif
+    let data = await renderer.pdfData()
 
-    let data = renderer.pdfData()
-    let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
-    let url = desktop.appendingPathComponent("\(suggestedName).pdf")
+    // Save to Documents folder
+    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    let url = documents.appendingPathComponent("\(suggestedName).pdf")
+
     try data.write(to: url, options: .atomic)
     return url
 }
 
+// MARK: - ImageRenderer Extension
+@MainActor
 extension ImageRenderer {
-    func pdfData() -> Data {
+    /// Cross-platform PDF from a SwiftUI view.
+    func pdfData() async -> Data {
         #if os(iOS)
+        let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792) // US Letter
         let format = UIGraphicsPDFRendererFormat()
-        let r = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792), format: format)
-        return r.pdfData { ctx in
-            ctx.beginPage()
-            self.render { ctx2 in
-                ctx2.cgContext.translateBy(x: 24, y: 24)
+
+        let data = UIGraphicsPDFRenderer(bounds: pageBounds, format: format).pdfData { ctx in
+            self.render { size, renderer in
+                ctx.beginPage()
+
+                // margins + draw rect
+                let margin: CGFloat = 24
+                let drawRect = CGRect(
+                    x: margin,
+                    y: margin,
+                    width: max(0, pageBounds.width  - margin * 2),
+                    height: max(0, pageBounds.height - margin * 2)
+                )
+
+                // scale to fit and center
+                ctx.cgContext.saveGState()
+                let scale = min(drawRect.width / size.width, drawRect.height / size.height)
+                ctx.cgContext.translateBy(x: drawRect.minX, y: drawRect.minY)
+                ctx.cgContext.scaleBy(x: scale, y: scale)
+                let offsetX = max(0, (drawRect.width  / scale - size.width)  / 2)
+                let offsetY = max(0, (drawRect.height / scale - size.height) / 2)
+                ctx.cgContext.translateBy(x: offsetX, y: offsetY)
+
+                // ✅ renderer expects a CGContext
+                renderer(ctx.cgContext)
+
+                ctx.cgContext.restoreGState()
             }
         }
+        return data
         #else
-        let pdf = NSMutableData()
+        // macOS CoreGraphics PDF
+        let data = NSMutableData()
         var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
-        guard let consumer = CGDataConsumer(data: pdf as CFMutableData),
-              let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return Data() }
-        ctx.beginPDFPage(nil)
-        self.render { _ in }
-        ctx.endPDFPage()
+        guard
+            let consumer = CGDataConsumer(data: data as CFMutableData),
+            let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil)
+        else { return Data() }
+
+        self.render { size, renderer in
+            ctx.beginPDFPage(nil)
+
+            let margin: CGFloat = 24
+            let drawRect = CGRect(
+                x: margin,
+                y: margin,
+                width: max(0, mediaBox.width  - margin * 2),
+                height: max(0, mediaBox.height - margin * 2)
+            )
+
+            ctx.saveGState()
+            let scale = min(drawRect.width / size.width, drawRect.height / size.height)
+            ctx.translateBy(x: drawRect.minX, y: drawRect.minY)
+            ctx.scaleBy(x: scale, y: scale)
+            let offsetX = max(0, (drawRect.width  / scale - size.width)  / 2)
+            let offsetY = max(0, (drawRect.height / scale - size.height) / 2)
+            ctx.translateBy(x: offsetX, y: offsetY)
+
+            renderer(ctx)
+            ctx.restoreGState()
+            ctx.endPDFPage()
+        }
+
         ctx.closePDF()
-        return pdf as Data
+        return data as Data
         #endif
     }
 }
